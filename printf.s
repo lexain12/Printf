@@ -3,17 +3,22 @@
 section .text
 
 section .text
-global _main                   ; predefined entry point name for MacOS ld
+global _start 	; predefined entry point name for MacOS ld
 
-_main:
+_start:
 
-	lea rdi, [rel Msg] 	; [rel] only for MacOS
-	lea rsi, [rel Char1]
-	lea rdx, [rel Char2]
+	mov rdi, Msg 	
+	mov rsi, '!'
+	mov rdx, '?'
+	push '3'
+	push '2'
+	push '1'
+	push rdx
+	push String
 	call Printf 
 
 
-	mov rax, 0x2000001 ; exit64bsd (rdi)
+	mov rax, 0x3c; exit64bsd (rdi)
 	xor rdi, rdi
 	syscall
 
@@ -27,39 +32,85 @@ _main:
 ; Exit: Prints into console str with all arguments
 ;================================================
 Printf:
+	push r11 				; curLength
+	xor r11, r11
+	push r12  				; tail
+	push r13 				; cur arg
+	lea r13, [rsp + 8*4] 		
+	push r14				; len of buf
+	xor r14, r14
+	mov r12, rdi
 
 .MainLoop:
+	add r12, r11
+	mov rdi, r12
 	push rsi
 	mov rsi, "%"
 	call Strchr
+	pop rsi
 	test rax, rax
 	je .NoSpecificators
 
-	sub rax, rdi 				; len of str for 
-	cmp rax, 256
-	jae .BufOverflow
-	
-.BufOverflow:
-	mov rdx, rax
-	mov rax, 0x2000004 ; write64bsd (rdi, rsi, rdx) ... r10, r8, r9
-	mov rdi, 1         ; stdout
-	mov rsi, rdi 
-	syscall
-	jmp .countinue 
-
 	
 	.countinue:
+	sub rax, rdi 				; rax = strlen
+	mov r11, rax
+	add rax, r14
+	cmp rax, 256	
+	jae .BuffOverflow
+
+	lea rdi, [Buff + r14]
+	mov r14, rax
+	mov rdx, r11
+	mov rsi, r12
+	call Memcpy
+
+	mov rdi, r12
+	add rdi, r11
+
+	inc rdi 				; next symbol after %
 	
+	xor rax, rax
+	mov al, [rdi]
+	sub rax, 0x61 				; in rax number of letter in small eng alphabet
+	jmp [JmpTable + rax*8]
+	
+.BuffOverflow:
+	mov rsi, Buff 				; prints buffer
+	mov rdi, 1
+	mov rdx, r14
+	mov rax, 0x01
+	syscall
+	xor r14, r14
+
+	mov rsi, r12
+	mov rdi, 1
+	mov rdx, r11
+	mov rax, 0x01
+	syscall
+
 
 .NoSpecificators:
+	mov rsi, Buff 				; prints buffer
+	mov rdi, 1
+	mov rdx, r14
+	mov rax, 0x01
+	syscall
+	xor r14, r14
+
+	mov rdi, r12
 	call Strlen
 	mov rdx, rax
 	mov rsi, rdi
-	mov rax, 0x2000004 			; prints into console
+	mov rax, 0x01				; prints into console
 	mov rdi, 1 				; stdout
 	syscall
 
 .done:
+	pop r14
+	pop r13
+	pop r12
+	pop r11
 	ret
 ;================================================
 
@@ -74,7 +125,8 @@ Printf:
 ;================================================
 Strchr:
 
-	mov ax, si
+	push rdi 
+	mov rax, rsi
 .Loop:
 	cmp byte [rdi], 0x0a
 	je .doneFail
@@ -86,10 +138,12 @@ Strchr:
 
 .doneFail:
 	mov ax, 0x00
+	pop rdi
 	ret 
 
 .done:
 	mov rax, rdi
+	pop rdi
 	ret
 ;================================================
 
@@ -114,6 +168,7 @@ Strlen:
 .done:
 	mov rax, rdi
 	pop rdi
+	sub rax, rdi
 	ret 
 ;================================================
 
@@ -123,16 +178,18 @@ Strlen:
 ; Entry: di = address on dest, si = address source, dx = counter
 ; Exit: ax = di
 ;================================================
-Memcpy
+Memcpy:
 
 	push rdi
 .Loop:
-	mov byte [rdi], byte [rsi]
+	mov al, byte [rsi]
+	mov byte [rdi], al
+
 	inc rsi
 	inc rdi
 	dec rdx
 	cmp rdx, 0x00
-	je .Loop
+	jne .Loop
 
 	
 	pop rax
@@ -154,9 +211,7 @@ Bsymbol:
 
 
 .done:
-	jmp Printf.countinue
-;================================================
-
+	jmp Printf.MainLoop
 ;================================================
 ; Csymbol
 ;================================================
@@ -165,8 +220,18 @@ Bsymbol:
 ; Destroys:
 ;================================================
 Csymbol:
+	mov rdx, 1
+	lea rsi, [r13] 			 	; last byte of argument
+	lea rdi, [r14 + Buff]
+	call Memcpy
+	inc r14
+	inc r12
+	inc r12
+	
+	add r13, 8
+
 .done:
-	jmp Printf.countinue
+	jmp Printf.MainLoop
 ;================================================
 
 ;================================================
@@ -178,7 +243,7 @@ Csymbol:
 ;================================================
 Dsymbol:
 .done:
-	jmp Printf.countinue
+	jmp Printf.MainLoop
 ;================================================
 
 ;================================================
@@ -190,7 +255,7 @@ Dsymbol:
 ;================================================
 Osymbol:
 .done:
-	jmp Printf.countinue
+	jmp Printf.MainLoop
 ;================================================
 
 ;================================================
@@ -201,8 +266,20 @@ Osymbol:
 ; Destroys:
 ;================================================
 Ssymbol:
+	mov rdi, qword [r13]
+	call Strlen
+	mov rdx, rax
+	lea rdi, [r14 + Buff]
+	add r14, rax
+	mov rsi, qword [r13]
+	call Memcpy
+	inc r12
+	inc r12
+
+	add r13, 8
+
 .done:
-	jmp Printf.countinue
+	jmp Printf.MainLoop
 ;================================================
 
 ;================================================
@@ -215,32 +292,32 @@ Ssymbol:
 Xsymbol:
 
 .done:
-	jmp Printf.countinue
+	jmp Printf.MainLoop
 ;================================================
 
 section .data
-            
-Buff: times 256 db 0
-.len db 0		
 
-Msg:        db "Hello ", 0x0a, 0x00
+Buff: times 255 db 0
+.len dw 0		
+
+Msg:        db "Hello %s %c %c j %c j %c", 0x0a, 0x00
 .len 		equ $ - Msg
 
-String: 	db "world"
+String: 	db "world", 0x00
 Char1: 		db "!"
 Char2: 		db "?"
 
 JmpTable: 
-dd 0
-.Bsymbol equ Bsymbol
-.Csymbol equ Csymbol
-.Dsymbol equ Dsymbol
-times 10 dd 0
-.Osymbol equ Osymbol
-times 3 dd 0
-.Ssymbol equ Ssymbol
-times 4 dd 0
-.Xsymbol equ Xsymbol
+dq 0
+dq Bsymbol
+dq Csymbol
+dq Dsymbol
+times 10 dq 0
+dq Osymbol
+times 3 dq 0
+dq Ssymbol
+times 4 dq 0
+dq Xsymbol
 
 
 

@@ -14,7 +14,6 @@ _start:
 	push '2'
 	push '1'
 	push rdx
-	push String
 	call Printf 
 
 
@@ -72,6 +71,8 @@ Printf:
 	
 	xor rax, rax
 	mov al, [rdi]
+	cmp al, '%'
+	je Persymbol
 	sub rax, 0x61 				; in rax number of letter in small eng alphabet
 	jmp [JmpTable + rax*8]
 	
@@ -181,6 +182,8 @@ Strlen:
 Memcpy:
 
 	push rdi
+	cmp rdx, 0
+	je .done
 .Loop:
 	mov al, byte [rsi]
 	mov byte [rdi], al
@@ -191,11 +194,35 @@ Memcpy:
 	cmp rdx, 0x00
 	jne .Loop
 
-	
+.done:
 	pop rax
 	ret
 ;================================================
 
+;================================================
+; PrintReverseBuffer
+;================================================
+; Entry: rdi = pointer on dest, rsi = pointer on sourse, rdx = counter
+;================================================
+MemcpyR:
+
+	push rdi
+.Loop:
+	mov al, byte [rsi]
+	mov byte [rdi], al
+
+	dec rsi
+	inc rdi
+	dec rdx
+	cmp rdx, 0x00
+	jne .Loop
+
+	
+	pop rax
+	ret
+
+ret
+;================================================
 ;================================================
 ; Next block is not a functions, documentation made for me, 
 ; YOU CAN'T call it like a functions
@@ -208,9 +235,29 @@ Memcpy:
 ; Destroys:
 ;================================================
 Bsymbol:
+	xor rbx, rbx
+	mov rdi, qword [r13]
 
+.Loop:
+	mov rax, rdi
+	and rax, 0x1
+	add rax, 0x30
+	mov [DecBuff + rbx], al
+	inc rbx
+	shr rdi, 1
+	cmp rdi, 0x00
+	jne .Loop
+
+	lea rdi, [r14 + Buff]
+	add r14, rbx
+	lea rsi, [DecBuff + rbx - 1]
+	mov rdx, rbx
+	call MemcpyR
 
 .done:
+	add r13, 8 					;next param
+	inc r12
+	inc r12  					; skip %o
 	jmp Printf.MainLoop
 ;================================================
 ; Csymbol
@@ -242,7 +289,28 @@ Csymbol:
 ; Destroys:
 ;================================================
 Dsymbol:
+	xor rbx, rbx
+	mov rax, qword [r13]
+	mov rdi, 10
+.Loop:
+	xor rdx, rdx
+	div rdi
+	add rdx, 0x30
+	mov byte [DecBuff + rbx], dl
+	inc rbx
+	cmp rax, 0x00
+	jne .Loop
+
+	lea rdi, [r14 + Buff]
+	add r14, rbx
+	lea rsi, [DecBuff + rbx - 1]
+	mov rdx, rbx
+	call MemcpyR
+	
 .done:
+	add r13, 8
+	inc r12
+	inc r12
 	jmp Printf.MainLoop
 ;================================================
 
@@ -254,7 +322,29 @@ Dsymbol:
 ; Destroys:
 ;================================================
 Osymbol:
+	xor rbx, rbx
+	mov rdi, qword [r13]
+
+.Loop:
+	mov rax, rdi
+	and rax, 7
+	add rax, 0x30
+	mov [DecBuff + rbx], al
+	inc rbx
+	shr rdi, 3
+	cmp rdi, 0x00
+	jne .Loop
+
+	lea rdi, [r14 + Buff]
+	add r14, rbx
+	lea rsi, [DecBuff + rbx - 1]
+	mov rdx, rbx
+	call MemcpyR
+
 .done:
+	add r13, 8 					;next param
+	inc r12
+	inc r12  					; skip %o
 	jmp Printf.MainLoop
 ;================================================
 
@@ -290,17 +380,61 @@ Ssymbol:
 ; Destroys:
 ;================================================
 Xsymbol:
+	xor rbx, rbx
+	mov rdi, qword [r13]
+
+.Loop:
+	mov rax, rdi
+	and rax, 15
+	mov rdx, rax
+	mov al, byte HexBuff[rdx]
+	mov [DecBuff + rbx], al
+	inc rbx
+	shr rdi, 4
+	cmp rdi, 0x00
+	jne .Loop
+
+	lea rdi, [r14 + Buff]
+	add r14, rbx
+	lea rsi, [DecBuff + rbx - 1]
+	mov rdx, rbx
+	call MemcpyR
 
 .done:
+	add r13, 8
+	inc r12
+	inc r12
+	jmp Printf.MainLoop
+;================================================
+
+;================================================
+; %symbol
+;================================================
+; Entry: 
+; Exit:
+; Destroys:
+;================================================
+Persymbol:
+.Loop:
+	mov byte [r14 + Buff], '%'
+	inc r14
+
+.done:
+	inc r12
+	inc r12
 	jmp Printf.MainLoop
 ;================================================
 
 section .data
 
+HexBuff db "0123456789abcdef"
+
+DecBuff times 20 db 0
+
 Buff: times 255 db 0
 .len dw 0		
 
-Msg:        db "Hello %s %c %c j %c j %c", 0x0a, 0x00
+Msg:        db "Hello %%%%%%%%%c %c j %c j %c", 0x0a, 0x00
 .len 		equ $ - Msg
 
 String: 	db "world", 0x00

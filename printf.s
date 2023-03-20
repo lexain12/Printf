@@ -398,7 +398,61 @@ Persymbol:
 	jmp Printf.MainLoop
 ;================================================
 
+;================================================
+; Calculation number of specificators
+; Enter: rdi = pointer on start of str terminated with 0x00
+; Exit: ax
+; Destroys: bx
+;================================================
+CalcP:
+	push rdi
+	.Loop:
+	mov bl, byte [rdi]
+	cmp bl, 0x00
+	je .Done
+
+	cmp [rdi], '%'
+	je .OneSpec
+	inc rdi
+	jmp .Loop
+
+.OneSpec:
+	cmp [rdi + 1], '%'
+	je .TwoSpec
+	inc rdi
+	inc rax
+	jmp .Loop
+	
+.TwoSpec:
+	inc rdi
+	inc rdi
+	jmp .Loop
+.Done:
+	pop rdi
+	ret
+;================================================
+
+;================================================
+; Convert c standart of params
+;================================================
+ConvertP:
+	call CalcP
+	push rdi
+	jmp [jmpTableParams + ax]
+
+	
+ret
+;================================================
+
 section .data
+
+jmpTableParams:
+dq ZeroParams
+dq OneParams
+dq TwoParams
+dq ThreeParams
+dq FourParams
+dq FiveParams
 
 HexBuff db "0123456789abcdef"
 

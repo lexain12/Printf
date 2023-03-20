@@ -1,25 +1,8 @@
 ; nasm -f macho64 -l 1-nasm.lst 1-nasm.s  ;  ld -s -o 1-nasm 1-nasm.o
 
 section .text
+global Printf 	; predefined entry point name for MacOS ld
 
-section .text
-global _start 	; predefined entry point name for MacOS ld
-
-_start:
-
-	mov rdi, Msg 	 			; params for printf
-	mov rsi, '!'
-	mov rdx, '?'
-	push '3'
-	push '2'
-	push '1'
-	push rdx
-	call Printf 
-
-
-	mov rax, 0x3c; exit64bsd (rdi)
-	xor rdi, rdi
-	syscall
 
 ;================================================
 
@@ -31,11 +14,11 @@ _start:
 ; Exit: Prints into console str with all arguments
 ;================================================
 Printf:
-	push r11 				; curLength
+	call ConvertP
 	xor r11, r11
-	push r12  				; tail
 	push r13 				; cur arg
-	lea r13, [rsp + 8*4] 		
+	lea r13, [rsp + 8] 		
+	push r12  				; tail
 	push r14				; len of buf
 	xor r14, r14
 	mov r12, rdi
@@ -106,10 +89,7 @@ Printf:
 	syscall
 
 .done:
-	pop r14
-	pop r13
-	pop r12
-	pop r11
+	mov rsp, r13
 	ret
 ;================================================
 
@@ -127,7 +107,7 @@ Strchr:
 	push rdi 
 	mov rax, rsi
 .Loop:
-	cmp byte [rdi], 0x0a
+	cmp byte [rdi], 0x00
 	je .doneFail
 
 	cmp byte [rdi], al
@@ -411,13 +391,14 @@ CalcP:
 	cmp bl, 0x00
 	je .Done
 
-	cmp [rdi], '%'
+	cmp  bl, '%'
 	je .OneSpec
 	inc rdi
 	jmp .Loop
 
 .OneSpec:
-	cmp [rdi + 1], '%'
+	mov bl, [rdi + 1]
+	cmp bl, '%'
 	je .TwoSpec
 	inc rdi
 	inc rax
@@ -437,15 +418,45 @@ CalcP:
 ;================================================
 ConvertP:
 	call CalcP
-	push rdi
-	jmp [jmpTableParams + ax]
+	pop r11
+	jmp [jmpTableParams + rax*8]
 
+ZeroParams:
+	jmp Done1
+
+OneParams:
+	push rsi
+	jmp Done1
+
+TwoParams:
+	push rdx
+	push rsi
+	jmp Done1
+ThreeParams:
+	push rcx
+	push rdx
+	push rsi
+	jmp Done1
+FourParams:
+	push r8
+	push rcx
+	push rdx 
+	push rsi
+	jmp Done1
+FiveParams:
+	push r9
+	push r8
+	push rcx
+	push rdx 
+	push rsi
+	jmp Done1
 	
-ret
+Done1:
+	push r11
+	ret
 ;================================================
 
-section .data
-
+section .rodata
 jmpTableParams:
 dq ZeroParams
 dq OneParams
@@ -453,20 +464,6 @@ dq TwoParams
 dq ThreeParams
 dq FourParams
 dq FiveParams
-
-HexBuff db "0123456789abcdef"
-
-DecBuff times 20 db 0
-
-Buff: times 255 db 0
-.len dw 0		
-
-Msg:        db "Hello %%%%%%%%%c %c j %c j %c", 0x0a, 0x00
-.len 		equ $ - Msg
-
-String: 	db "world", 0x00
-Char1: 		db "!"
-Char2: 		db "?"
 
 JmpTable: 
 dq 0
@@ -479,6 +476,20 @@ times 3 dq 0
 dq Ssymbol
 times 4 dq 0
 dq Xsymbol
+
+section .data
+
+
+HexBuff db "0123456789abcdef"
+
+DecBuff times 20 db 0
+
+Buff: times 255 db 0
+.len dw 0		
+
+Msg:        db "Hello %c  ", 0x0a, "%c ", 0x00
+.len 		equ $ - Msg
+
 
 
 

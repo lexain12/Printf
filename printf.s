@@ -7,7 +7,7 @@ global _start 	; predefined entry point name for MacOS ld
 
 _start:
 
-	mov rdi, Msg 	
+	mov rdi, Msg 	 			; params for printf
 	mov rsi, '!'
 	mov rdx, '?'
 	push '3'
@@ -41,32 +41,30 @@ Printf:
 	mov r12, rdi
 
 .MainLoop:
-	add r12, r11
-	mov rdi, r12
+	add r12, r11 				; Update the tail pointer
+	mov rdi, r12 			
 	push rsi
 	mov rsi, "%"
-	call Strchr
+	call Strchr 				; finds first '%'
 	pop rsi
 	test rax, rax
 	je .NoSpecificators
 
-	
 	.countinue:
 	sub rax, rdi 				; rax = strlen
 	mov r11, rax
 	add rax, r14
 	cmp rax, 256	
-	jae .BuffOverflow
+	jae .BuffOverflow 			; check on buff overflow
 
-	lea rdi, [Buff + r14]
+	lea rdi, [Buff + r14] 			; copy the string until '%' into buffer
 	mov r14, rax
 	mov rdx, r11
 	mov rsi, r12
 	call Memcpy
 
-	mov rdi, r12
+	mov rdi, r12 				; rdi = Head
 	add rdi, r11
-
 	inc rdi 				; next symbol after %
 	
 	xor rax, rax
@@ -178,6 +176,7 @@ Strlen:
 ;================================================
 ; Entry: di = address on dest, si = address source, dx = counter
 ; Exit: ax = di
+; Destroys: dx, si
 ;================================================
 Memcpy:
 
@@ -200,9 +199,11 @@ Memcpy:
 ;================================================
 
 ;================================================
-; PrintReverseBuffer
+; MemcpyReverse
 ;================================================
 ; Entry: rdi = pointer on dest, rsi = pointer on sourse, rdx = counter
+; Exit: ax = pointer on start of str
+; Destroys: rsi, rdx
 ;================================================
 MemcpyR:
 
@@ -229,10 +230,6 @@ ret
 ;================================================
 ;================================================
 ; Bsymbol 
-;================================================
-; Entry: rdi = number
-; Exit:
-; Destroys:
 ;================================================
 Bsymbol:
 	xor rbx, rbx
@@ -262,10 +259,6 @@ Bsymbol:
 ;================================================
 ; Csymbol
 ;================================================
-; Entry: rdi = char
-; Exit:
-; Destroys:
-;================================================
 Csymbol:
 	mov rdx, 1
 	lea rsi, [r13] 			 	; last byte of argument
@@ -283,10 +276,6 @@ Csymbol:
 
 ;================================================
 ; DSymbol
-;================================================
-; Entry: rdi = number
-; Exit:
-; Destroys:
 ;================================================
 Dsymbol:
 	xor rbx, rbx
@@ -316,10 +305,6 @@ Dsymbol:
 
 ;================================================
 ; Osymbol
-;================================================
-; Entry: rdi = number
-; Exit:
-; Destroys:
 ;================================================
 Osymbol:
 	xor rbx, rbx
@@ -351,10 +336,6 @@ Osymbol:
 ;================================================
 ; Ssymbol
 ;================================================
-; Entry: rdi = pointer on str terminated with 0x00
-; Exit:
-; Destroys:
-;================================================
 Ssymbol:
 	mov rdi, qword [r13]
 	call Strlen
@@ -374,10 +355,6 @@ Ssymbol:
 
 ;================================================
 ; Xsymbol
-;================================================
-; Entry: rdi = number
-; Exit:
-; Destroys:
 ;================================================
 Xsymbol:
 	xor rbx, rbx
@@ -409,10 +386,6 @@ Xsymbol:
 
 ;================================================
 ; %symbol
-;================================================
-; Entry: 
-; Exit:
-; Destroys:
 ;================================================
 Persymbol:
 .Loop:

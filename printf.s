@@ -1,7 +1,24 @@
 ; nasm -f macho64 -l 1-nasm.lst 1-nasm.s  ;  ld -s -o 1-nasm 1-nasm.o
 
 section .text
-global Printf 	; predefined entry point name for MacOS ld
+%if self
+global _start
+
+_start:
+	mov rdi, Msg 	 			; params for printf
+	mov rsi, -16
+	mov rdx, -14
+	call Printf 
+
+
+	mov rax, 0x3c; exit64bsd (rdi)
+	xor rdi, rdi
+syscall
+%else 
+
+global Printf
+
+%endif
 
 
 ;================================================
@@ -212,24 +229,11 @@ ret
 ; Bsymbol 
 ;================================================
 Bsymbol:
-	xor rbx, rbx
 	mov rdi, qword [r13]
-
-.Loop:
-	mov rax, rdi
-	and rax, 0x1
-	add rax, 0x30
-	mov [DecBuff + rbx], al
-	inc rbx
-	shr rdi, 1
-	cmp rdi, 0x00
-	jne .Loop
-
-	lea rdi, [r14 + Buff]
-	add r14, rbx
-	lea rsi, [DecBuff + rbx - 1]
-	mov rdx, rbx
-	call MemcpyR
+	mov cl, 1 				; 2**1 = 2
+	lea rsi, [r14 + Buff] 			; 
+	call CopyNumInBuff
+	add r14, rax
 
 .done:
 	add r13, 8 					;next param
@@ -258,9 +262,16 @@ Csymbol:
 ; DSymbol
 ;================================================
 Dsymbol:
+	xor rcx, rcx
 	xor rbx, rbx
 	mov rax, qword [r13]
 	mov rdi, 10
+	cmp eax, 0
+	jge .Loop
+	not eax
+	inc rax
+	mov cl, 0x01
+
 .Loop:
 	xor rdx, rdx
 	div rdi
@@ -270,6 +281,12 @@ Dsymbol:
 	cmp rax, 0x00
 	jne .Loop
 
+	cmp cl, 0x01 				; check if number is negative
+	jne .NotNeg
+	mov byte [DecBuff + rbx], '-'
+	inc rbx
+
+.NotNeg:
 	lea rdi, [r14 + Buff]
 	add r14, rbx
 	lea rsi, [DecBuff + rbx - 1]
@@ -280,31 +297,19 @@ Dsymbol:
 	add r13, 8
 	inc r12
 	inc r12
-	jmp Printf.MainLoop
+jmp Printf.MainLoop
 ;================================================
 
 ;================================================
 ; Osymbol
 ;================================================
 Osymbol:
-	xor rbx, rbx
+
 	mov rdi, qword [r13]
-
-.Loop:
-	mov rax, rdi
-	and rax, 7
-	add rax, 0x30
-	mov [DecBuff + rbx], al
-	inc rbx
-	shr rdi, 3
-	cmp rdi, 0x00
-	jne .Loop
-
-	lea rdi, [r14 + Buff]
-	add r14, rbx
-	lea rsi, [DecBuff + rbx - 1]
-	mov rdx, rbx
-	call MemcpyR
+	mov cl, 3 				; 2**3 = 8
+	lea rsi, [r14 + Buff] 			; 
+	call CopyNumInBuff
+	add r14, rax
 
 .done:
 	add r13, 8 					;next param
@@ -337,25 +342,12 @@ Ssymbol:
 ; Xsymbol
 ;================================================
 Xsymbol:
-	xor rbx, rbx
+
 	mov rdi, qword [r13]
-
-.Loop:
-	mov rax, rdi
-	and rax, 15
-	mov rdx, rax
-	mov al, byte HexBuff[rdx]
-	mov [DecBuff + rbx], al
-	inc rbx
-	shr rdi, 4
-	cmp rdi, 0x00
-	jne .Loop
-
-	lea rdi, [r14 + Buff]
-	add r14, rbx
-	lea rsi, [DecBuff + rbx - 1]
-	mov rdx, rbx
-	call MemcpyR
+	mov cl, 4 				; 2**4 = 16
+	lea rsi, [r14 + Buff] 			; 
+	call CopyNumInBuff
+	add r14, rax
 
 .done:
 	add r13, 8
@@ -376,6 +368,43 @@ Persymbol:
 	inc r12
 	inc r12
 	jmp Printf.MainLoop
+;================================================
+
+;================================================
+; Copy register into buffer in 2**n system
+;================================================
+; Entry: rdi = number, cl = n, rsi = pointer on buff
+; Exit: rax = number of bytes written in buff
+; Destroys: rsi, rdi, rdx, rbx
+;================================================
+CopyNumInBuff:
+	push r11 	
+	xor rbx, rbx
+
+	mov r11, 0x01 				; Make a mask for system translation
+	shl r11, cl
+	sub r11, 1
+
+.Loop:
+	mov rax, rdi
+	and rax, r11
+	mov al, byte HexBuff[rax]
+	mov [DecBuff + rbx], al
+	inc rbx
+	shr rdi, cl
+	cmp rdi, 0x00
+	jne .Loop
+
+
+	mov rdi, rsi 				;[r14 + Buff]
+						;add r14, rbx
+	lea rsi, [DecBuff + rbx - 1]
+	mov rdx, rbx
+	call MemcpyR
+	mov rax, rbx 				; return Value
+
+	pop r11
+	ret
 ;================================================
 
 ;================================================
@@ -484,10 +513,10 @@ HexBuff db "0123456789abcdef"
 
 DecBuff times 20 db 0
 
-Buff: times 255 db 0
+Buff: times 255 db 0 ,0x00
 .len dw 0		
 
-Msg:        db "Hello %c  ", 0x0a, "%c ", 0x00
+Msg:        db "Hello %d %d", 0x0a, 0x00
 .len 		equ $ - Msg
 
 

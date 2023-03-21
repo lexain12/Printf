@@ -1,13 +1,19 @@
-section .text
-global printf, _start
 
-_start:
+global main
+
+extern printf
+
+main:
 	push rbp
 	mov rbp, rsp
+
 	mov rdi, Msg
 	mov rsi, 123
 	call printf
 	pop rbp
+
+	xor eax, eax
+	ret
 
 
 section .data

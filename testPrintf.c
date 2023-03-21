@@ -3,5 +3,5 @@ extern void Printf(const char*, ...);
 
 int main()
 {
-	Printf ("Hel %c %d\n", 'f', 15);
+	Printf ("Hello bitch %d\n", -16);
 }

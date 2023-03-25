@@ -6,8 +6,8 @@ global _start
 
 _start:
 	mov rdi, Msg 	 			; params for printf
-	mov rsi, -16
-	mov rdx, -14
+	mov rsi, 10
+	mov rdx, 10
 	call Printf 
 
 
@@ -16,11 +16,35 @@ _start:
 syscall
 %else 
 
-global Printf
+global VitPrintf
 
 %endif
 
 
+;================================================
+
+;================================================
+VitPrintf:
+        pop r10         ; save ret addr 
+        
+        push r9         ; save first 6 args
+        push r8
+        push rcx
+        push rdx 
+        push rsi 
+
+        push rbp        ; save old rbp value 
+
+        mov rbp, rsp    
+        add rbp, 8      ; set rbp on ret addr
+        
+        call Printf
+
+        pop rbp         ; return rbp to old value
+        add rsp, 8*5    ; return rsp to old value
+
+        push r10 
+        ret
 ;================================================
 
 ;================================================
@@ -31,10 +55,9 @@ global Printf
 ; Exit: Prints into console str with all arguments
 ;================================================
 Printf:
-	call ConvertP
 	xor r11, r11
 	push r13 				; cur arg
-	lea r13, [rsp + 8] 		
+	mov r13, rbp
 	push r12  				; tail
 	push r14				; len of buf
 	xor r14, r14
@@ -72,6 +95,8 @@ Printf:
 	cmp al, '%'
 	je Persymbol
 	sub rax, 0x61 				; in rax number of letter in small eng alphabet
+	cmp rax, 'x'
+	ja Symbol
 	jmp [JmpTable + rax*8]
 	
 .BuffOverflow:
@@ -106,7 +131,7 @@ Printf:
 	syscall
 
 .done:
-	mov rsp, r13
+	lea rsp, [rbp - 8*2]
 	ret
 ;================================================
 
@@ -371,6 +396,21 @@ Persymbol:
 ;================================================
 
 ;================================================
+; symbol
+;================================================
+Symbol:
+.Loop:
+	mov al, byte [r12 + 1]
+	mov byte [r14 + Buff], al
+	inc r14
+
+.done:
+	inc r12
+	inc r12
+	jmp Printf.MainLoop
+;================================================
+
+;================================================
 ; Copy register into buffer in 2**n system
 ;================================================
 ; Entry: rdi = number, cl = n, rsi = pointer on buff
@@ -407,103 +447,18 @@ CopyNumInBuff:
 	ret
 ;================================================
 
-;================================================
-; Calculation number of specificators
-; Enter: rdi = pointer on start of str terminated with 0x00
-; Exit: ax
-; Destroys: bx
-;================================================
-CalcP:
-	push rdi
-	.Loop:
-	mov bl, byte [rdi]
-	cmp bl, 0x00
-	je .Done
-
-	cmp  bl, '%'
-	je .OneSpec
-	inc rdi
-	jmp .Loop
-
-.OneSpec:
-	mov bl, [rdi + 1]
-	cmp bl, '%'
-	je .TwoSpec
-	inc rdi
-	inc rax
-	jmp .Loop
-	
-.TwoSpec:
-	inc rdi
-	inc rdi
-	jmp .Loop
-.Done:
-	pop rdi
-	ret
-;================================================
-
-;================================================
-; Convert c standart of params
-;================================================
-ConvertP:
-	call CalcP
-	pop r11
-	jmp [jmpTableParams + rax*8]
-
-ZeroParams:
-	jmp Done1
-
-OneParams:
-	push rsi
-	jmp Done1
-
-TwoParams:
-	push rdx
-	push rsi
-	jmp Done1
-ThreeParams:
-	push rcx
-	push rdx
-	push rsi
-	jmp Done1
-FourParams:
-	push r8
-	push rcx
-	push rdx 
-	push rsi
-	jmp Done1
-FiveParams:
-	push r9
-	push r8
-	push rcx
-	push rdx 
-	push rsi
-	jmp Done1
-	
-Done1:
-	push r11
-	ret
-;================================================
-
 section .rodata
-jmpTableParams:
-dq ZeroParams
-dq OneParams
-dq TwoParams
-dq ThreeParams
-dq FourParams
-dq FiveParams
 
 JmpTable: 
-dq 0
+dq Symbol
 dq Bsymbol
 dq Csymbol
 dq Dsymbol
-times 10 dq 0
+times 10 dq Symbol
 dq Osymbol
-times 3 dq 0
+times 3 dq Symbol
 dq Ssymbol
-times 4 dq 0
+times 4 dq Symbol
 dq Xsymbol
 
 section .data
@@ -513,7 +468,7 @@ HexBuff db "0123456789abcdef"
 
 DecBuff times 20 db 0
 
-Buff: times 255 db 0 ,0x00
+Buff: times 512 db 0 ,0x00
 .len dw 0		
 
 Msg:        db "Hello %d %d", 0x0a, 0x00

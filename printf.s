@@ -2,7 +2,7 @@
 
 section .text
 %if self
-global _start
+global _start 
 
 _start:
 	mov rdi, Msg 	 			; params for printf
@@ -16,6 +16,7 @@ _start:
 syscall
 %else 
 
+extern printf
 global VitPrintf
 
 %endif
@@ -25,6 +26,33 @@ global VitPrintf
 
 ;================================================
 VitPrintf:
+	push r11
+	push r10
+	push r9
+	push r8
+	push rcx
+	push rdx
+	push rdi 
+	push rsi
+	push rbp
+	mov rbp, rsp
+
+	xor rax, rax
+	mov rdi, Msg
+	mov rsi, 123
+	call printf
+	pop rbp
+	pop rsi
+	pop rdi
+	pop rdx
+	pop rcx
+	pop r8
+	pop r9
+	pop r10
+	pop r11
+
+	xor eax, eax
+
         pop r10         ; save ret addr 
         
         push r9         ; save first 6 args
@@ -55,6 +83,7 @@ VitPrintf:
 ; Exit: Prints into console str with all arguments
 ;================================================
 Printf:
+
 	xor r11, r11
 	push r13 				; cur arg
 	mov r13, rbp
@@ -94,10 +123,12 @@ Printf:
 	mov al, [rdi]
 	cmp al, '%'
 	je Persymbol
-	sub rax, 0x61 				; in rax number of letter in small eng alphabet
+
 	cmp rax, 'x'
 	ja Symbol
-	jmp [JmpTable + rax*8]
+	cmp rax, 'a'
+	jb Symbol
+	jmp [JmpTable + (rax - 'a')*8]
 	
 .BuffOverflow:
 	mov rsi, Buff 				; prints buffer
@@ -471,7 +502,7 @@ DecBuff times 20 db 0
 Buff: times 512 db 0 ,0x00
 .len dw 0		
 
-Msg:        db "Hello %d %d", 0x0a, 0x00
+Msg: db "Hello there %d", 0x0a, 0x00
 .len 		equ $ - Msg
 
 
